@@ -14,21 +14,28 @@ const RET_MODELS = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// A full-universe solve can take minutes on the free-tier backend, so /api/solve returns a job
-// id to poll at /api/solve_result rather than blocking one long request (which would time out).
-// Resolves with the solve result, or null if the caller cancelled (deps changed) mid-poll.
+// A full-universe solve takes minutes on the free-tier backend, so /api/solve starts a job and
+// returns a job id we poll at /api/solve_result instead of blocking one long request. While the
+// solve pins the single CPU the server may briefly return 502s — hit() swallows those so we just
+// keep polling. Resolves with the result, or null if the caller cancelled (deps changed) mid-poll.
 async function solveApi(p, cancelled) {
   const qs = new URLSearchParams(p).toString()
-  let r = await fetch(`/api/solve?${qs}`).then((x) => x.json())
-  for (let i = 0; i < 600; i++) {                       // ~600 * 1.2s ≈ 12 min ceiling
+  const hit = async (url) => {                           // null on any transient failure -> keep waiting
+    try { const x = await fetch(url); return x.ok ? await x.json() : null } catch { return null }
+  }
+  const start = await hit(`/api/solve?${qs}`)
+  if (start && start.status === 'done') return start.result
+  let job = start && start.job
+  for (let i = 0; i < 600; i++) {                        // ~600 * 1.2s ≈ 12 min ceiling
     if (cancelled()) return null
-    if (r.status === 'done') return r.result
-    if (r.status === 'error') throw new Error(r.error || 'solve failed')
     await sleep(1200)
     if (cancelled()) return null
-    r = r.status === 'unknown'                           // job fell out of cache — restart it
-      ? await fetch(`/api/solve?${qs}`).then((x) => x.json())
-      : await fetch(`/api/solve_result?job=${encodeURIComponent(r.job)}`).then((x) => x.json())
+    const r = job ? await hit(`/api/solve_result?job=${encodeURIComponent(job)}`) : await hit(`/api/solve?${qs}`)
+    if (!r) continue                                     // 502/network blip during a busy solve — retry
+    if (r.status === 'done') return r.result
+    if (r.status === 'error') throw new Error(r.error || 'solve failed')
+    if (r.status === 'unknown') { job = null; continue } // instance restarted, job gone — re-POST next loop
+    if (r.job) job = r.job
   }
   throw new Error('solve timed out')
 }
@@ -182,7 +189,7 @@ export default function App() {
     const run = setTimeout(() => {                        // debounce rapid slider moves into one solve
       setLoading(true)
       solveApi({ cov_model: cov, return_model: ret, rf: rf.toFixed(4), erp: (erp / 100).toFixed(4),
-        bl_conf: blConf, include_stocks: stocks, max_assets: maxA, n_points: 30, max_holdings: maxHold },
+        bl_conf: blConf, include_stocks: stocks, max_assets: maxA, n_points: 20, max_holdings: maxHold },
         () => cancel)
         .then((d) => { if (!cancel && d) { setData(d); setLoading(false) } })
         .catch(() => { if (!cancel) setLoading(false) })

@@ -8,7 +8,9 @@ services:
     region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/health
+    # No healthCheckPath on purpose: a full solve saturates the 0.1-CPU free instance, and an
+    # HTTP health check would read that as "unhealthy" and restart it mid-solve (killing the job).
+    # Render still restarts the process if it actually exits.
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
