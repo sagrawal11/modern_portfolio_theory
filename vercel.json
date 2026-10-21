@@ -3,6 +3,6 @@
   "buildCommand": "npm --prefix web install && npm --prefix web run build",
   "outputDirectory": "web/dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE_WITH_RENDER_URL/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://modern-portfolio-theory-api.onrender.com/api/:path*" }
   ]
 }
