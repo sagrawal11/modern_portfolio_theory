@@ -1,0 +1,9 @@
+# Backend (FastAPI) — everything api.py needs to solve the frontier live.
+fastapi
+uvicorn[standard]
+numpy
+pandas
+pyarrow          # parquet read/write for the price cache
+scikit-learn     # Ledoit-Wolf covariance shrinkage
+quadprog         # the long-only quadratic program
+yfinance         # live prices, risk-free rate, history

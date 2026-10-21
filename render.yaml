@@ -1,0 +1,15 @@
+# Render Blueprint — deploys the FastAPI backend as one free web service.
+# Connect this repo in the Render dashboard (New + -> Blueprint) and it reads this file.
+services:
+  - type: web
+    name: modern-portfolio-theory-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"      # pin so quadprog/sklearn/pyarrow resolve to prebuilt wheels

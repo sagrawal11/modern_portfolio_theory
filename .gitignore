@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Vite
+web/node_modules/
+web/dist/
+*.log
+
+# Secrets — never commit keys
+.env
+*.key
+secrets.*
+
+# OS / editor / tooling
+.DS_Store
+.vscode/
+.idea/
+.gstack/
+.claude/
+.vercel/
+
+# NOTE: data_cache/ (price parquet + sp500.csv) is intentionally committed so the
+# deployed free-tier backend serves an instant first solve instead of a cold download.

@@ -1,0 +1,7 @@
+# Vercel hosts only the frontend — keep the Python backend out of the deploy.
+*.py
+__pycache__/
+data_cache/
+teacher_inputs.json
+requirements.txt
+render.yaml
