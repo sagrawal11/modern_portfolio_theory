@@ -12,8 +12,26 @@ const RET_MODELS = [
   ['raw', 'Historical mean (fragile)'],
 ]
 
-const solveApi = (p) =>
-  fetch(`/api/solve?${new URLSearchParams(p)}`).then((r) => { if (!r.ok) throw new Error('solve'); return r.json() })
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// A full-universe solve can take minutes on the free-tier backend, so /api/solve returns a job
+// id to poll at /api/solve_result rather than blocking one long request (which would time out).
+// Resolves with the solve result, or null if the caller cancelled (deps changed) mid-poll.
+async function solveApi(p, cancelled) {
+  const qs = new URLSearchParams(p).toString()
+  let r = await fetch(`/api/solve?${qs}`).then((x) => x.json())
+  for (let i = 0; i < 600; i++) {                       // ~600 * 1.2s ≈ 12 min ceiling
+    if (cancelled()) return null
+    if (r.status === 'done') return r.result
+    if (r.status === 'error') throw new Error(r.error || 'solve failed')
+    await sleep(1200)
+    if (cancelled()) return null
+    r = r.status === 'unknown'                           // job fell out of cache — restart it
+      ? await fetch(`/api/solve?${qs}`).then((x) => x.json())
+      : await fetch(`/api/solve_result?job=${encodeURIComponent(r.job)}`).then((x) => x.json())
+  }
+  throw new Error('solve timed out')
+}
 
 // Map the risk slider to an allocation (client-side). Risky weights are always >= 0.
 function selPortfolio(d, mode, target, rf, lev) {
@@ -161,12 +179,15 @@ export default function App() {
 
   useEffect(() => {
     let cancel = false
-    setLoading(true)
-    solveApi({ cov_model: cov, return_model: ret, rf: rf.toFixed(4), erp: (erp / 100).toFixed(4),
-      bl_conf: blConf, include_stocks: stocks, max_assets: maxA, n_points: 30, max_holdings: maxHold })
-      .then((d) => { if (!cancel) { setData(d); setLoading(false) } })
-      .catch(() => { if (!cancel) setLoading(false) })
-    return () => { cancel = true }
+    const run = setTimeout(() => {                        // debounce rapid slider moves into one solve
+      setLoading(true)
+      solveApi({ cov_model: cov, return_model: ret, rf: rf.toFixed(4), erp: (erp / 100).toFixed(4),
+        bl_conf: blConf, include_stocks: stocks, max_assets: maxA, n_points: 30, max_holdings: maxHold },
+        () => cancel)
+        .then((d) => { if (!cancel && d) { setData(d); setLoading(false) } })
+        .catch(() => { if (!cancel) setLoading(false) })
+    }, 350)
+    return () => { cancel = true; clearTimeout(run) }
   }, [cov, ret, stocks, maxA, erp, blConf, rf, maxHold])
 
   const maxV = data ? Math.max(...data.frontier.map((p) => p.vol)) : 30

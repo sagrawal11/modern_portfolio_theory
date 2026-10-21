@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 
@@ -42,7 +44,30 @@ def _riskfree(_bucket: int):
         return 0.041, False
 
 
-@lru_cache(maxsize=64)
+# Full ~610-asset solves take minutes on the 0.1-CPU free tier — longer than one HTTP request
+# can hang on — so /api/solve runs them as background jobs the page polls. _solve_lock serializes
+# the compute so only one runs at a time (peak RAM stays ~one solve, well under 512 MB); _jobs
+# doubles as the result cache, capped so memory stays bounded.
+# ponytail: in-memory job store — fine for a single instance; it just re-solves after a restart.
+_solve_lock = threading.Lock()
+_jobs_lock = threading.Lock()
+_jobs: "OrderedDict[str, dict]" = OrderedDict()   # param-key -> {status, result, error}
+_JOBS_MAX = 32
+
+
+def _run_solve(key: str, args: tuple) -> None:
+    try:
+        with _solve_lock:
+            res = _solve(*args)
+        with _jobs_lock:
+            if key in _jobs:
+                _jobs[key].update(status="done", result=res)
+    except Exception as e:                            # a bad param set marks the job, never wedges it
+        with _jobs_lock:
+            if key in _jobs:
+                _jobs[key].update(status="error", error=str(e))
+
+
 def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: float,
            include_stocks: bool, max_assets: int, n_points: int, max_holdings: int) -> dict:
     u = universe.build_universe(include_stocks=include_stocks)
@@ -100,8 +125,40 @@ def riskfree():
 def solve(cov_model: str = "ledoit_wolf", return_model: str = "capm", rf: float = 0.041,
           erp: float = 0.05, bl_conf: float = 1.0, include_stocks: bool = True,
           max_assets: int = 400, n_points: int = 30, max_holdings: int = 0):
-    return _solve(cov_model, return_model, round(rf, 4), round(erp, 4), round(bl_conf, 2),
-                  include_stocks, max_assets, n_points, max_holdings)
+    """Start (or reuse) a solve job. Returns the result immediately if it's already cached,
+    else a job id to poll at /api/solve_result — keeps the long full-universe solve off the
+    HTTP timeout."""
+    args = (cov_model, return_model, round(rf, 4), round(erp, 4), round(bl_conf, 2),
+            include_stocks, max_assets, n_points, max_holdings)
+    key = repr(args)
+    with _jobs_lock:
+        j = _jobs.get(key)
+        if j and j["status"] == "done":
+            _jobs.move_to_end(key)
+            return {"status": "done", "result": j["result"]}
+        if j and j["status"] == "running":
+            return {"status": "running", "job": key}
+        _jobs[key] = {"status": "running", "result": None, "error": None}
+        _jobs.move_to_end(key)
+        while len(_jobs) > _JOBS_MAX:
+            _jobs.popitem(last=False)                 # evict the oldest cached solve
+    threading.Thread(target=_run_solve, args=(key, args), daemon=True).start()
+    return {"status": "running", "job": key}
+
+
+@app.get("/api/solve_result")
+def solve_result(job: str):
+    """Poll a solve job: status is running | done (+result) | error (+error) | unknown (re-POST)."""
+    with _jobs_lock:
+        j = _jobs.get(job)
+        if j is None:
+            return {"status": "unknown"}
+        if j["status"] == "done":
+            _jobs.move_to_end(job)
+            return {"status": "done", "result": j["result"]}
+        if j["status"] == "error":
+            return {"status": "error", "error": j["error"]}
+        return {"status": "running"}
 
 
 class PricesReq(BaseModel):
