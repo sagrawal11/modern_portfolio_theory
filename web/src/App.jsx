@@ -44,17 +44,20 @@ async function solveApi(p, cancelled, onProgress) {
 }
 
 // Map the risk slider to an allocation (client-side). Risky weights are always >= 0.
+// Classic mode scales the max-Sharpe portfolio you'd actually hold: the capped one (d.port) when
+// Max holdings is set, else the full-universe tangency. sel carries its own tickers/names so the
+// allocation table lists the right holdings.
 function selPortfolio(d, mode, target, rf, lev) {
   if (!d) return null
-  const t = d.tangency
   if (mode === 'classic') {
+    const t = d.port || { ret: d.tangency.ret, vol: d.tangency.vol, w: d.tangency.w, tickers: d.tickers, names: d.names }
     let y = target / t.vol
     if (!lev) y = Math.min(y, 1)
-    return { ret: rf * 100 + y * (t.ret - rf * 100), vol: y * t.vol, w: t.w.map((x) => x * y), wRf: 1 - y, lever: y }
+    return { ret: rf * 100 + y * (t.ret - rf * 100), vol: y * t.vol, w: t.w.map((x) => x * y), wRf: 1 - y, lever: y, tickers: t.tickers, names: t.names }
   }
   let bi = 0, bd = 1e9
   d.frontier.forEach((p, i) => { const dd = Math.abs(p.vol - target); if (dd < bd) { bd = dd; bi = i } })
-  return { ret: d.frontier[bi].ret, vol: d.frontier[bi].vol, w: d.frontier_w[bi], wRf: 0, lever: 1 }
+  return { ret: d.frontier[bi].ret, vol: d.frontier[bi].vol, w: d.frontier_w[bi], wRf: 0, lever: 1, tickers: d.tickers, names: d.names }
 }
 
 const HIST_RANGES = [['1d', '1D'], ['5d', '1W'], ['1mo', '1M'], ['1y', '1Y'], ['ytd', 'YTD'], ['5y', '5Y']]
@@ -232,8 +235,9 @@ export default function App() {
   }, [cov, ret, stocks, maxA, erp, blConf, rf, maxHold])
 
   const maxV = data ? Math.max(...data.frontier.map((p) => p.vol)) : 30
+  const tanVol = data ? (data.port || data.tangency).vol : 30   // your held portfolio's max-Sharpe vol
   const bounds = !data ? [0, 30]
-    : mode === 'classic' ? [0, lev ? maxV : Math.min(data.tangency.vol, maxV)]
+    : mode === 'classic' ? [0, lev ? maxV : Math.min(tanVol, maxV)]
     : [data.minvar.vol, maxV]
 
   useEffect(() => { setTarget((t) => Math.min(Math.max(t, bounds[0]), bounds[1])) }, [data, mode, lev]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -281,7 +285,7 @@ export default function App() {
   let bigRows = [], smallRows = [], nPos = 0, totalW = 0, smallW = 0
   if (data && sel) {
     const assetRows = []
-    data.tickers.forEach((tk, i) => { if (sel.w[i] > 1e-5) assetRows.push([`${tk} — ${data.names[i]}`, sel.w[i] * 100, tk]) })
+    sel.tickers.forEach((tk, i) => { if (sel.w[i] > 1e-5) assetRows.push([`${tk} — ${sel.names[i]}`, sel.w[i] * 100, tk]) })
     assetRows.sort((a, b) => b[1] - a[1])
     nPos = assetRows.length
     const cashW = sel.wRf * 100

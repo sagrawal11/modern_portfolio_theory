@@ -94,32 +94,36 @@ def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: fl
               for i in range(len(tk))]
 
     p(0.38, "Building the efficient frontier")
-    # holdings cap: build the frontier on just the top-N names (ranked by the full
-    # tangency weight), so everything stays a coherent <=N-asset portfolio.
-    if 0 < max_holdings < len(tk):
-        rank = engine.tangency(mu, cov, rf)["w"]
-        hold = sorted(int(i) for i in np.argsort(rank)[::-1][:max_holdings])
-    else:
-        hold = list(range(len(tk)))
-    muH, covH = mu[hold], cov[np.ix_(hold, hold)]
-    tkH = [tk[i] for i in hold]
-    nmH = [str(meta.iloc[i]["name"]) for i in hold]
-
-    fr = engine.efficient_frontier(muH, covH, n_points=n_points,
+    names = [str(meta.iloc[i]["name"]) for i in range(len(tk))]
+    # Frontier / tangency / min-variance describe the FULL opportunity set — the whole scatter —
+    # so the curve spans every asset, not just the ones you hold.
+    fr = engine.efficient_frontier(mu, cov, n_points=n_points,
                                    on_progress=lambda i, n: p(0.42 + 0.50 * (i / n), "Building the efficient frontier"))
-    tan = engine.tangency(muH, covH, rf)
-    w_mv = engine.min_variance(muH, covH)
-    mv_ret, mv_vol = engine.port_stats(w_mv, muH, covH)
+    tan = engine.tangency(mu, cov, rf)
+    w_mv = engine.min_variance(mu, cov)
+    mv_ret, mv_vol = engine.port_stats(w_mv, mu, cov)
+
+    # max_holdings caps YOUR portfolio only (not the frontier): keep the top-N names by tangency
+    # weight and re-solve into a coherent <=N-asset portfolio. It sits inside the full frontier —
+    # the honest cost of concentrating. port is None when uncapped (frontend falls back to tangency).
+    port = None
+    if 0 < max_holdings < len(tk):
+        hold = sorted(int(i) for i in np.argsort(tan["w"])[::-1][:max_holdings])
+        tanH = engine.tangency(mu[hold], cov[np.ix_(hold, hold)], rf)
+        port = {"ret": tanH["ret"] * 100, "vol": tanH["vol"] * 100,
+                "w": [round(float(x), 5) for x in tanH["w"]],
+                "tickers": [tk[i] for i in hold], "names": [names[i] for i in hold]}
     p(0.98, "Finalizing")
 
     return {
         "assets": assets,
-        "frontier": [{"vol": round(p["vol"] * 100, 4), "ret": round(p["ret"] * 100, 4)} for p in fr],
-        "frontier_w": [[round(float(x), 5) for x in p["w"]] for p in fr],
+        "frontier": [{"vol": round(pt["vol"] * 100, 4), "ret": round(pt["ret"] * 100, 4)} for pt in fr],
+        "frontier_w": [[round(float(x), 5) for x in pt["w"]] for pt in fr],
         "tangency": {"vol": tan["vol"] * 100, "ret": tan["ret"] * 100, "sharpe": tan["sharpe"],
                      "w": [round(float(x), 5) for x in tan["w"]]},
         "minvar": {"vol": mv_vol * 100, "ret": mv_ret * 100},
-        "rf": rf, "n_assets": len(tk), "tickers": tkH, "names": nmH,
+        "port": port,
+        "rf": rf, "n_assets": len(tk), "tickers": tk, "names": names,
     }
 
 
