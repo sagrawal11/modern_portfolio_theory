@@ -84,23 +84,27 @@ def min_variance(mu, cov, long_only: bool = True) -> np.ndarray:
     return _qp(cov, np.ones((1, n)), [1.0], long_only)
 
 
-def efficient_frontier(mu, cov, n_points: int = 50, long_only: bool = True) -> list[dict]:
+def efficient_frontier(mu, cov, n_points: int = 50, long_only: bool = True,
+                       on_progress=None) -> list[dict]:
     """Trace the efficient half of the frontier as [{ret, vol, w}, ...].
 
     Targets run from the global-min-variance return up to the max achievable return
-    (the top-return asset when long-only).
+    (the top-return asset when long-only). on_progress(done, total), if given, is called
+    after each point so a caller can report real progress (this loop is the slow part).
     """
     mu = np.asarray(mu, float)
     w_mv = min_variance(mu, cov, long_only)
     r_mv = float(w_mv @ mu)
     r_max = float(mu.max()) if long_only else float(mu.max()) * 1.5
     pts = []
-    for t in np.linspace(r_mv, r_max, n_points):
+    targets = np.linspace(r_mv, r_max, n_points)
+    for i, t in enumerate(targets):
         w = _qp(cov, [np.ones(len(mu)), mu], [1.0, t], long_only)
-        if w is None:
-            continue
-        ret, vol = port_stats(w, mu, cov)
-        pts.append({"ret": ret, "vol": vol, "w": w})
+        if w is not None:
+            ret, vol = port_stats(w, mu, cov)
+            pts.append({"ret": ret, "vol": vol, "w": w})
+        if on_progress:
+            on_progress(i + 1, n_points)
     return pts
 
 

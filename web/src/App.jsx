@@ -18,13 +18,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // returns a job id we poll at /api/solve_result instead of blocking one long request. While the
 // solve pins the single CPU the server may briefly return 502s — hit() swallows those so we just
 // keep polling. Resolves with the result, or null if the caller cancelled (deps changed) mid-poll.
-async function solveApi(p, cancelled) {
+async function solveApi(p, cancelled, onProgress) {
   const qs = new URLSearchParams(p).toString()
   const hit = async (url) => {                           // null on any transient failure -> keep waiting
     try { const x = await fetch(url); return x.ok ? await x.json() : null } catch { return null }
   }
+  const tick = (r) => { if (onProgress && r && r.progress != null) onProgress(r.progress, r.stage || '') }
   const start = await hit(`/api/solve?${qs}`)
   if (start && start.status === 'done') return start.result
+  tick(start)
   let job = start && start.job
   for (let i = 0; i < 600; i++) {                        // ~600 * 1.2s ≈ 12 min ceiling
     if (cancelled()) return null
@@ -36,6 +38,7 @@ async function solveApi(p, cancelled) {
     if (r.status === 'error') throw new Error(r.error || 'solve failed')
     if (r.status === 'unknown') { job = null; continue } // instance restarted, job gone — re-POST next loop
     if (r.job) job = r.job
+    tick(r)
   }
   throw new Error('solve timed out')
 }
@@ -65,6 +68,20 @@ function Spinner({ label, overlay, small }) {
     </div>
   )
   return overlay ? <div className="load-overlay">{inner}</div> : inner
+}
+
+// Determinate progress bar for the main solve. The backend reports real progress (data ->
+// covariance -> each frontier point), and the bar resets to 0 whenever a new solve starts.
+function ProgressOverlay({ progress, stage }) {
+  const pct = Math.round((progress || 0) * 100)
+  return (
+    <div className="load-overlay">
+      <div className="load-box">
+        <div className="pbar"><div className="pbar-fill" style={{ width: `${Math.max(pct, 2)}%` }} /></div>
+        <div className="pbar-meta"><span>{stage || 'Solving…'}</span><span className="pbar-pct">{pct}%</span></div>
+      </div>
+    </div>
+  )
 }
 
 // Click-through live price chart for a single asset (dot on the scatter, or allocation row).
@@ -176,6 +193,8 @@ export default function App() {
   const [target, setTarget] = useState(10)
   const [detail, setDetail] = useState(null)   // {ticker, name} of the asset whose chart is open
   const [showSmall, setShowSmall] = useState(false)   // expand the "under 0.5%" sliver group
+  const [progress, setProgress] = useState(0)         // 0..1 solve progress from the backend
+  const [stage, setStage] = useState('')              // current solve stage label
   const chartRef = useRef()
 
   const rf = rfInfo?.rate ?? 0.041
@@ -188,9 +207,11 @@ export default function App() {
     let cancel = false
     const run = setTimeout(() => {                        // debounce rapid slider moves into one solve
       setLoading(true)
+      setProgress(0); setStage('')                        // reset the bar on every recompute
       solveApi({ cov_model: cov, return_model: ret, rf: rf.toFixed(4), erp: (erp / 100).toFixed(4),
         bl_conf: blConf, include_stocks: stocks, max_assets: maxA, n_points: 20, max_holdings: maxHold },
-        () => cancel)
+        () => cancel,
+        (frac, st) => { if (!cancel) { setProgress(frac); setStage(st) } })
         .then((d) => { if (!cancel && d) { setData(d); setLoading(false) } })
         .catch(() => { if (!cancel) setLoading(false) })
     }, 350)
@@ -319,7 +340,7 @@ export default function App() {
         </div>
         <div className="chart-wrap">
           <div className="chart" ref={chartRef}></div>
-          {loading && <Spinner overlay label="Solving the efficient frontier…" />}
+          {loading && <ProgressOverlay progress={progress} stage={stage} />}
         </div>
         {sel && sel.lever > 1.001 &&
           <div className="muted" style={{ marginTop: 10 }}>Levered {sel.lever.toFixed(2)}× — borrowing {((sel.lever - 1) * 100).toFixed(0)}% at the risk-free rate (you opted in).</div>}

@@ -56,12 +56,16 @@ _JOBS_MAX = 32
 
 
 def _run_solve(key: str, args: tuple) -> None:
-    try:
-        with _solve_lock:
-            res = _solve(*args)
+    def report(frac: float, stage: str) -> None:      # live progress for the polling frontend
         with _jobs_lock:
             if key in _jobs:
-                _jobs[key].update(status="done", result=res)
+                _jobs[key].update(progress=round(frac, 3), stage=stage)
+    try:
+        with _solve_lock:
+            res = _solve(*args, on_progress=report)
+        with _jobs_lock:
+            if key in _jobs:
+                _jobs[key].update(status="done", result=res, progress=1.0, stage="Done")
     except Exception as e:                            # a bad param set marks the job, never wedges it
         with _jobs_lock:
             if key in _jobs:
@@ -69,10 +73,16 @@ def _run_solve(key: str, args: tuple) -> None:
 
 
 def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: float,
-           include_stocks: bool, max_assets: int, n_points: int, max_holdings: int) -> dict:
+           include_stocks: bool, max_assets: int, n_points: int, max_holdings: int,
+           on_progress=None) -> dict:
+    def p(frac, stage):
+        if on_progress:
+            on_progress(frac, stage)
+    p(0.02, "Loading market data")
     u = universe.build_universe(include_stocks=include_stocks)
     tickers = u["ticker"].tolist()[:max_assets]
     px = data.download_history(tickers, period="2y")
+    p(0.08, "Estimating returns & covariance")
     mu, cov, tk = data.estimate_inputs(px, cov_model=cov_model, return_model=return_model,
                                        rf=rf, erp=erp, bl_conf=bl_conf)
     meta = u.set_index("ticker").loc[tk]
@@ -83,6 +93,7 @@ def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: fl
                "vol": round(float(sigma[i]) * 100, 3), "ret": round(float(mu[i]) * 100, 3)}
               for i in range(len(tk))]
 
+    p(0.38, "Building the efficient frontier")
     # holdings cap: build the frontier on just the top-N names (ranked by the full
     # tangency weight), so everything stays a coherent <=N-asset portfolio.
     if 0 < max_holdings < len(tk):
@@ -94,10 +105,12 @@ def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: fl
     tkH = [tk[i] for i in hold]
     nmH = [str(meta.iloc[i]["name"]) for i in hold]
 
-    fr = engine.efficient_frontier(muH, covH, n_points=n_points)
+    fr = engine.efficient_frontier(muH, covH, n_points=n_points,
+                                   on_progress=lambda i, n: p(0.42 + 0.50 * (i / n), "Building the efficient frontier"))
     tan = engine.tangency(muH, covH, rf)
     w_mv = engine.min_variance(muH, covH)
     mv_ret, mv_vol = engine.port_stats(w_mv, muH, covH)
+    p(0.98, "Finalizing")
 
     return {
         "assets": assets,
@@ -137,13 +150,13 @@ def solve(cov_model: str = "ledoit_wolf", return_model: str = "capm", rf: float 
             _jobs.move_to_end(key)
             return {"status": "done", "result": j["result"]}
         if j and j["status"] == "running":
-            return {"status": "running", "job": key}
-        _jobs[key] = {"status": "running", "result": None, "error": None}
+            return {"status": "running", "job": key, "progress": j.get("progress", 0), "stage": j.get("stage", "")}
+        _jobs[key] = {"status": "running", "result": None, "error": None, "progress": 0.0, "stage": "Starting"}
         _jobs.move_to_end(key)
         while len(_jobs) > _JOBS_MAX:
             _jobs.popitem(last=False)                 # evict the oldest cached solve
     threading.Thread(target=_run_solve, args=(key, args), daemon=True).start()
-    return {"status": "running", "job": key}
+    return {"status": "running", "job": key, "progress": 0.0, "stage": "Starting"}
 
 
 @app.get("/api/solve_result")
@@ -158,7 +171,7 @@ def solve_result(job: str):
             return {"status": "done", "result": j["result"]}
         if j["status"] == "error":
             return {"status": "error", "error": j["error"]}
-        return {"status": "running"}
+        return {"status": "running", "progress": j.get("progress", 0), "stage": j.get("stage", "")}
 
 
 class PricesReq(BaseModel):
