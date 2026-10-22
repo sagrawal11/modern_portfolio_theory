@@ -95,3 +95,55 @@ input[type=checkbox] { accent-color: var(--accent); margin-right: 6px; }
 .pbar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .45s ease; box-shadow: 0 0 12px rgba(245, 169, 127, 0.45); }
 .pbar-meta { display: flex; justify-content: space-between; align-items: baseline; width: 300px; max-width: 70vw; color: var(--muted); font-size: 12px; }
 .pbar-pct { color: var(--text); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* --- "?" help buttons (one next to every bit of jargon) --- */
+.help { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 3px;
+  padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
+  font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: middle; flex: none; transition: .12s; }
+.help:hover { color: var(--accent); border-color: var(--accent); }
+.chip-row { display: flex; align-items: center; gap: 6px; }
+.chip-row button { flex: 1; }
+
+/* --- glossary modal (reuses .modal / .modal-backdrop) --- */
+.gloss { width: min(520px, 92vw); }
+.gloss-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.gloss-body { font-size: 14px; color: var(--text); line-height: 1.62; margin: 12px 0 0; }
+
+/* --- legend key under the chart --- */
+.chartkey { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 16px; margin: 12px 2px 0; font-size: 11.5px; color: var(--muted); }
+.chartkey .kk { display: inline-flex; align-items: center; gap: 6px; }
+.chartkey .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: none; }
+
+/* --- buttons shared by welcome + tour --- */
+.btn-primary { background: var(--accent); color: #1a1512; border: 0; padding: 10px 16px; border-radius: 9px; font-weight: 700; font-size: 13px; cursor: pointer; transition: .12s; }
+.btn-primary:hover { filter: brightness(1.07); }
+.btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 10px 14px; border-radius: 9px; font-size: 13px; cursor: pointer; transition: .12s; }
+.btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+.btn-primary.sm, .btn-ghost.sm { padding: 7px 13px; font-size: 12.5px; }
+
+/* --- welcome screen --- */
+.welcome { width: min(520px, 92vw); text-align: center; }
+.welcome-emoji { font-size: 38px; line-height: 1; }
+.welcome-h { font-size: 22px; margin: 10px 0 12px; letter-spacing: -0.01em; }
+.welcome-p { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 12px; text-align: left; }
+.welcome-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+
+/* --- replay-the-tour link in the sidebar --- */
+.tour-link { display: inline-block; background: transparent; border: 0; color: var(--accent); font-size: 12px;
+  cursor: pointer; padding: 0; margin: 2px 0 20px; text-decoration: underline; text-underline-offset: 2px; }
+.tour-link:hover { filter: brightness(1.12); }
+
+/* --- guided tour: a transparent click-mask + a spotlight ring + a tooltip card --- */
+.tour-mask { position: fixed; inset: 0; z-index: 60; }
+.tour-ring { position: fixed; border-radius: 12px; border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(7, 9, 14, 0.72), 0 0 22px rgba(245, 169, 127, 0.35);
+  pointer-events: none; z-index: 61; transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease; }
+.tour-pop { position: fixed; z-index: 62; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); }
+.tour-step { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+.tour-title { font-size: 16px; font-weight: 700; margin: 4px 0 6px; letter-spacing: -0.01em; }
+.tour-body { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0; }
+.tour-dots { display: flex; gap: 5px; margin: 14px 0 12px; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: .2s; }
+.tour-dots span.on { background: var(--accent); width: 15px; border-radius: 3px; }
+.tour-nav { display: flex; align-items: center; gap: 8px; }
