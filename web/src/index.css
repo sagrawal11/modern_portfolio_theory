@@ -65,6 +65,9 @@ input[type=checkbox] { accent-color: var(--accent); margin-right: 6px; }
 .modal-ranges button { padding: 7px 18px; }
 .modal-chart { position: relative; height: 340px; }
 .modal-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.modal-about { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 10px 0 14px; }
+.modal-about a { color: var(--accent); text-decoration: none; }
+.modal-about a:hover { text-decoration: underline; }
 .modal-news { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
 .news-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
 .news-item { display: block; text-decoration: none; padding: 8px 10px; border-radius: 8px; margin: 0 -10px; }

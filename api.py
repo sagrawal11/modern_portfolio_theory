@@ -134,6 +134,32 @@ def riskfree():
     return {"rate": rate, "is_live": live}
 
 
+@lru_cache(maxsize=2048)
+def _about(ticker: str) -> dict:
+    """Plain-language description + website for one ticker from yfinance .info (free, no key).
+    Lets the asset modal explain what BKLN actually is. Cached once per ticker (descriptions
+    are effectively static)."""
+    import yfinance as yf
+    info = yf.Ticker(ticker).info
+    summ = (info.get("longBusinessSummary") or "").strip()
+    if summ:                                           # trim to ~2 sentences, end on a period
+        cut = summ[:340]
+        dot = cut.rfind(". ")
+        summ = (cut[:dot + 1] if dot > 60 else cut).strip()
+    return {"quoteType": info.get("quoteType"), "summary": summ or None,
+            "website": info.get("website"), "sector": info.get("sector"),
+            "industry": info.get("industry")}
+
+
+@app.get("/api/about")
+def about(ticker: str):
+    """Short description + website for one asset (yfinance .info, cached)."""
+    try:
+        return _about(ticker.strip().upper())
+    except Exception:
+        return {"summary": None, "website": None}
+
+
 @app.get("/api/solve")
 def solve(cov_model: str = "ledoit_wolf", return_model: str = "capm", rf: float = 0.041,
           erp: float = 0.05, bl_conf: float = 1.0, include_stocks: bool = True,

@@ -90,6 +90,7 @@ function AssetModal({ ticker, name, onClose }) {
   const [hist, setHist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [news, setNews] = useState(null)
+  const [about, setAbout] = useState(null)
   const ref = useRef()
   const sub = name.includes(' — ') ? name.split(' — ').slice(1).join(' — ') : name
 
@@ -108,6 +109,16 @@ function AssetModal({ ticker, name, onClose }) {
       .catch(() => { if (!cancel) setNews([]) })
     return () => { cancel = true }
   }, [ticker, sub])
+
+  useEffect(() => {
+    let cancel = false
+    setAbout(null)
+    fetch(`/api/about?ticker=${encodeURIComponent(ticker)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancel) setAbout(d) })
+      .catch(() => { if (!cancel) setAbout({}) })
+    return () => { cancel = true }
+  }, [ticker])
 
   useEffect(() => {
     let cancel = false
@@ -150,6 +161,8 @@ function AssetModal({ ticker, name, onClose }) {
           <div><div className="modal-tk">{ticker}</div><div className="muted">{sub}</div></div>
           <button className="modal-x" onClick={onClose}>✕</button>
         </div>
+        {about?.summary && <div className="modal-about">{about.summary}
+          {about.website && <> <a href={about.website} target="_blank" rel="noreferrer">{about.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a></>}</div>}
         {last != null && <div className="modal-price">${last.toFixed(2)}
           <span className={up ? 'up' : 'down'}> {up ? '▲' : '▼'} {chg >= 0 ? '+' : ''}{chg.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)</span>
           <span className="muted" style={{ fontSize: 11, marginLeft: 8, fontWeight: 400 }}>over {HIST_RANGES.find(([k]) => k === range)[1]}</span></div>}
