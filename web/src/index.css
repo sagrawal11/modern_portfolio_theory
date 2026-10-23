@@ -102,7 +102,7 @@ input[type=checkbox] { accent-color: var(--accent); margin-right: 6px; }
   font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: middle; flex: none; transition: .12s; }
 .help:hover { color: var(--accent); border-color: var(--accent); }
 .chip-row { display: flex; align-items: center; gap: 6px; }
-.chip-row button { flex: 1; }
+.chip-row button:not(.help) { flex: 1; }
 
 /* --- glossary modal (reuses .modal / .modal-backdrop) --- */
 .gloss { width: min(520px, 92vw); }
