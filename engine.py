@@ -1,7 +1,7 @@
 """Modern Portfolio Theory engine — efficient frontier, tangency portfolio, and CAL.
 
 Given expected returns (mu), a covariance matrix (cov), and a risk-free rate, this
-computes everything the teacher's spreadsheet does *plus* the piece it leaves out:
+computes everything the reference spreadsheet does *plus* the piece it leaves out:
 the risk-free asset, the Capital Allocation Line, the tangency (max-Sharpe) portfolio,
 and the risk-slider mapping that turns "how much risk can you stomach" into an actual
 allocation.
@@ -9,11 +9,11 @@ allocation.
 Everything is in DECIMAL units internally (0.08 = 8%), annualized.
 
 Optimization is a quadratic program solved with `quadprog`. Long-only by default
-(w >= 0 for every asset) — no shorting, ever, so no asset can take a negative weight.
+(w >= 0 for every asset): no shorting, ever, so no asset can take a negative weight.
 That scales cleanly to hundreds of assets, where scipy's general solver would crawl.
 
 Two honesty notes:
-  * The long-only frontier tops out at the single highest-return asset — you cannot
+  * The long-only frontier tops out at the single highest-return asset: you cannot
     out-return your best asset without leverage or shorting. That cap is real.
   * The tangency portfolio trusts `mu`; expected returns are the fragile input, which
     is why we also expose the minimum-variance portfolio, which ignores `mu` entirely.
@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import quadprog
 
-DATA = Path(__file__).parent / "teacher_inputs.json"
+DATA = Path(__file__).parent / "reference_inputs.json"
 
 
 # --------------------------------------------------------------------------- data
@@ -79,7 +79,7 @@ def _qp(cov, A_eq, b_eq, long_only: bool = True) -> np.ndarray | None:
 
 
 def min_variance(mu, cov, long_only: bool = True) -> np.ndarray:
-    """Global minimum-variance portfolio. Ignores mu — robust to return-forecast error."""
+    """Global minimum-variance portfolio. Ignores mu, robust to return-forecast error."""
     n = len(mu)
     return _qp(cov, np.ones((1, n)), [1.0], long_only)
 
@@ -109,7 +109,7 @@ def efficient_frontier(mu, cov, n_points: int = 50, long_only: bool = True,
 
 
 def tangency(mu, cov, rf: float, long_only: bool = True) -> dict:
-    """Max-Sharpe portfolio — the risky portfolio the CAL is tangent to.
+    """Max-Sharpe portfolio: the risky portfolio the CAL is tangent to.
 
     Long-only solve uses the standard reformulation: min yᵀΣy s.t. (mu-rf)ᵀy = 1,
     y >= 0, then rescale w = y / sum(y). Trusts the expected returns.
@@ -119,7 +119,7 @@ def tangency(mu, cov, rf: float, long_only: bool = True) -> dict:
     excess = mu - rf
     if long_only:
         y = _qp(cov, excess.reshape(1, n), [1.0], long_only=True)
-        if y is None or y.sum() <= 0:          # nothing beats rf — fall back to min-var
+        if y is None or y.sum() <= 0:          # nothing beats rf, fall back to min-var
             w = min_variance(mu, cov, True)
         else:
             w = y / y.sum()
@@ -153,7 +153,7 @@ def cal_point(target_vol: float, tan: dict, rf: float, allow_leverage: bool = Tr
 # --------------------------------------------------------------------------- check
 
 def demo() -> None:
-    """Self-check: reproduce the teacher's spreadsheet numbers from scratch."""
+    """Self-check: reproduce the reference spreadsheet's numbers from scratch."""
     d = load_inputs()
     mu, cov = d["mu"], d["cov"]
     val = d["raw"]["validation"]

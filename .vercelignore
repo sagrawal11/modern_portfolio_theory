@@ -2,6 +2,6 @@
 *.py
 __pycache__/
 data_cache/
-teacher_inputs.json
+reference_inputs.json
 requirements.txt
 render.yaml
