@@ -1,9 +1,9 @@
 """FastAPI backend for the efficient-frontier app.
 
-Thin JSON layer over the existing Python brains (engine.py / data.py / universe.py) —
-all the MPT math is reused unchanged. Serves the built React app (web/dist) at /.
+A thin JSON layer over the core modules (engine.py, data.py, universe.py); all the
+MPT math is reused unchanged. Also serves the built React app (web/dist) at /.
 
-Run (dev):   uvicorn api:app --reload --port 8000      (from the frontier/ dir)
+Run (dev):  uvicorn api:app --reload --port 8000
 """
 from __future__ import annotations
 
@@ -44,11 +44,11 @@ def _riskfree(_bucket: int):
         return 0.041, False
 
 
-# Full ~610-asset solves take minutes on the 0.1-CPU free tier — longer than one HTTP request
-# can hang on — so /api/solve runs them as background jobs the page polls. _solve_lock serializes
-# the compute so only one runs at a time (peak RAM stays ~one solve, well under 512 MB); _jobs
-# doubles as the result cache, capped so memory stays bounded.
-# ponytail: in-memory job store — fine for a single instance; it just re-solves after a restart.
+# Full ~610-asset solves take minutes on the 0.1-CPU free tier, longer than one HTTP request can
+# hang on, so /api/solve runs them as background jobs the page polls. _solve_lock serializes the
+# compute so only one runs at a time (peak RAM stays ~one solve, well under 512 MB). _jobs doubles
+# as the result cache, capped so memory stays bounded.
+# ponytail: in-memory job store, fine for a single instance; it just re-solves after a restart.
 _solve_lock = threading.Lock()
 _jobs_lock = threading.Lock()
 _jobs: "OrderedDict[str, dict]" = OrderedDict()   # param-key -> {status, result, error}
@@ -95,7 +95,7 @@ def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: fl
 
     p(0.38, "Building the efficient frontier")
     names = [str(meta.iloc[i]["name"]) for i in range(len(tk))]
-    # Frontier / tangency / min-variance describe the FULL opportunity set — the whole scatter —
+    # Frontier, tangency, and min-variance describe the FULL opportunity set (the whole scatter),
     # so the curve spans every asset, not just the ones you hold.
     fr = engine.efficient_frontier(mu, cov, n_points=n_points,
                                    on_progress=lambda i, n: p(0.42 + 0.50 * (i / n), "Building the efficient frontier"))
@@ -104,7 +104,7 @@ def _solve(cov_model: str, return_model: str, rf: float, erp: float, bl_conf: fl
     mv_ret, mv_vol = engine.port_stats(w_mv, mu, cov)
 
     # max_holdings caps YOUR portfolio only (not the frontier): keep the top-N names by tangency
-    # weight and re-solve into a coherent <=N-asset portfolio. It sits inside the full frontier —
+    # weight and re-solve into a coherent <=N-asset portfolio. It sits inside the full frontier,
     # the honest cost of concentrating. port is None when uncapped (frontend falls back to tangency).
     port = None
     if 0 < max_holdings < len(tk):
@@ -241,8 +241,8 @@ def history(ticker: str, range: str = "1mo"):
 
 
 def _dedup_titles(rows: list) -> list:
-    """Drop syndicated reprints — the same story carried by several outlets. Key on the
-    title stripped to lowercase alphanumerics, keep the first (Google ranks it highest)."""
+    """Drop syndicated reprints (the same story carried by several outlets). Key on the title
+    stripped to lowercase alphanumerics, keep the first (Google ranks it highest)."""
     out, seen = [], set()
     for r in rows:
         key = re.sub(r"[^a-z0-9]", "", r["title"].lower())
@@ -254,7 +254,7 @@ def _dedup_titles(rows: list) -> list:
 
 @lru_cache(maxsize=256)
 def _news(ticker: str, name: str, _bucket: int) -> list:
-    # Google News RSS — free, no API key. Quote the ticker + name + a finance hint so a
+    # Google News RSS: free, no API key. Quote the ticker + name + a finance hint so a
     # cryptic ETF label (e.g. "20y+ UST") still returns ticker-specific headlines.
     q = f'"{ticker}" {name} stock OR ETF'.strip()
     url = "https://news.google.com/rss/search?q=" + urllib.parse.quote(q) + "&hl=en-US&gl=US&ceid=US:en"

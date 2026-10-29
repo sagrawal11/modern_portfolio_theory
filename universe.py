@@ -1,6 +1,6 @@
 """The investable universe: ~130 diverse ETFs (distinct exposures) + the S&P 500.
 
-Curated for *distinct* exposures, not raw count — near-duplicate ETFs (SPY/VOO/IVV
+Curated for *distinct* exposures, not raw count: near-duplicate ETFs (SPY/VOO/IVV
 are all the S&P 500) make the covariance matrix singular and the optimizer pile into
 one of them arbitrarily. One representative per exposure; breadth comes from spanning
 sectors, regions, factors, the whole bond curve, commodities, and real assets, then

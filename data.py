@@ -2,7 +2,7 @@
 
 Expected returns from trailing means are the fragile input (we show that in the UI);
 the covariance is where scale bites. With ~500 assets and ~2y of daily data (~500
-obs), the raw sample covariance is nearly singular — so we shrink it (Ledoit-Wolf)
+obs), the raw sample covariance is nearly singular, so we shrink it (Ledoit-Wolf)
 toward a structured target, which keeps it invertible and the optimizer sane.
 
 Prices are cached to data_cache/ so re-runs and the per-minute live poll are cheap.
@@ -19,7 +19,7 @@ from sklearn.covariance import LedoitWolf
 
 CACHE = Path(__file__).parent / "data_cache"
 TRADING_DAYS = 252
-RET_CLIP = 0.25   # winsorize daily returns to ±25% — kills bad-tick / unadjusted-split artifacts
+RET_CLIP = 0.25   # winsorize daily returns to ±25%: kills bad-tick / unadjusted-split artifacts
                   # (e.g. a free-data glitch printing a +177% day) that would otherwise dominate variance
 
 
@@ -43,8 +43,8 @@ def bayes_stein(mu_daily: np.ndarray, cov_daily: np.ndarray, T: int):
     """Jorion (1986) Bayes-Stein shrinkage of the mean toward the min-variance return.
 
     Raw trailing means are wildly noisy and make the optimizer chase hindsight winners
-    (the Sharpe-10 nonsense). This pulls each asset's mean toward mu0 — the return of the
-    global minimum-variance portfolio — by an amount phi that grows when the estimates
+    (the Sharpe-10 nonsense). This pulls each asset's mean toward mu0 (the return of the
+    global minimum-variance portfolio) by an amount phi that grows when the estimates
     look noisy (small T) and the cross-sectional spread looks like luck. Daily units in,
     daily units out; annualize afterwards. Returns (mu_shrunk, phi).
     """
@@ -62,7 +62,7 @@ def capm_returns(R: np.ndarray, rf: float, erp: float) -> np.ndarray:
     """Equilibrium-style expected returns: mu_i = rf + beta_i * ERP.
 
     Market proxy = the equal-weight mean of the universe. Uses each asset's *systematic
-    risk* (beta), not its noisy trailing mean, so it never chases hindsight winners — the
+    risk* (beta), not its noisy trailing mean, so it never chases hindsight winners, and the
     tangency stays sane (Sharpe near the market's). ERP is the one macro assumption.
     """
     rm = R.mean(axis=1)
@@ -76,7 +76,7 @@ def factor_cov_daily(R: np.ndarray, k: int = 15) -> np.ndarray:
 
     Keeps the top-k return factors as the systematic covariance and everything else as an
     idiosyncratic diagonal: Sigma = (low-rank systematic) + diag(residual variance). That
-    structure is always well-conditioned and invertible — the right tool for the stock
+    structure is always well-conditioned and invertible, the right tool for the stock
     block, where hundreds of names share a handful of real drivers (market, sectors).
     Diagonal (total variances) is preserved exactly; only the noisy off-diagonals are
     rank-reduced.
@@ -99,7 +99,7 @@ def ledoit_wolf_cov(R: np.ndarray) -> np.ndarray:
 
     sklearn's plain LedoitWolf shrinks the whole covariance toward a *spherical* target
     (one average variance on every diagonal). In a universe spanning T-bills (~0.2% vol)
-    and tech stocks (~30% vol) that drags the near-cash bonds up to ~13% vol — so the
+    and tech stocks (~30% vol) that drags the near-cash bonds up to ~13% vol, so the
     optimizer can't tell a Treasury from an equity and a low-risk portfolio has nothing
     safe to hold. Standardizing to unit variance first shrinks only the correlations
     (target = identity), then rescaling by the true per-asset vols keeps SHV at 0.2%
@@ -135,7 +135,7 @@ def momentum_returns(R: np.ndarray, rf: float, tilt: float = 0.10,
     Rank assets by trailing ~11-month return (excluding the last month, the classic
     12-1 window that skips short-term reversal), z-score across the universe, and set
     mu = rf + tilt*z. High-momentum names get high expected returns, so the optimizer
-    *concentrates* in the current leaders — and it *rotates* as momentum shifts over time.
+    *concentrates* in the current leaders, and it *rotates* as momentum shifts over time.
     This is an active bet that momentum persists (a well-documented factor), not pure MPT.
     """
     T = R.shape[0]
@@ -176,13 +176,13 @@ def estimate_inputs(prices: pd.DataFrame, cov_model: str = "ledoit_wolf", return
 
 
 def condition_number(cov: np.ndarray) -> float:
-    """Ratio of largest/smallest eigenvalue — how close the matrix is to singular."""
+    """Ratio of largest/smallest eigenvalue: how close the matrix is to singular."""
     ev = np.linalg.eigvalsh(cov)
     return float(ev.max() / max(ev.min(), 1e-18))
 
 
 def live_prices(tickers: list[str]) -> pd.Series:
-    """Latest available price per ticker — for marking the portfolio live.
+    """Latest available price per ticker, for marking the portfolio live.
 
     Tries 1-minute intraday first; falls back to daily closes when the market is
     closed or intraday comes back empty.
